@@ -48,8 +48,9 @@ function initial_push( $post_id, $remote_post_id, $signature, $target_url ) {
  * @param string $target_url Target url to push to.
  */
 function handle_push( $post_id, $remote_post_id, $signature, $target_url ) {
+	if ( ! wp_doing_cron() ) { //phpcs:ignore
 	/**
-	 * Add possibility to perform comments pushing
+	 * Add possibility to perform comments pushing in bg
 	 *
 	 * @param bool      true            Whether to oudh comment.
 	 * @param int    $post_id Pushed post ID.
@@ -61,7 +62,7 @@ function handle_push( $post_id, $remote_post_id, $signature, $target_url ) {
 	if ( false === $allow_comments_update ) {
 		return;
 	}
-
+	}
 	$args         = array(
 		'post_id' => $post_id,
 	);
@@ -143,8 +144,9 @@ function handle_update( $post_id, $comment ) {
 	if ( empty( $subscriptions ) ) {
 		return;
 	}
+	if ( ! wp_doing_cron() ) { //phpcs:ignore
 	/**
-	 * Add possibility to perform comments pushing
+	 * Add possibility to perform comments update in bg
 	 *
 	 * @param bool      true            Whether to oudh comment.
 	 * @param int    $post_id Pushed post ID.
@@ -154,6 +156,7 @@ function handle_update( $post_id, $comment ) {
 	if ( ! $allow_comments_push ) {
 		return;
 	}
+}
 	$comments_data = [];
 	if ( is_array( $comment ) ) {
 		foreach ( $comment as $id ) {
