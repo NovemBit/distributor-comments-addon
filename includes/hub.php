@@ -17,7 +17,9 @@ function setup() {
 			add_action( 'dt_post_subscription_created', __NAMESPACE__ . '\initial_push', 10, 4 );
 			add_action( 'comment_post', __NAMESPACE__ . '\on_comment_insert', 10, 2 );
 			add_action( 'edit_comment', __NAMESPACE__ . '\on_comment_update', 10, 2 );
-			add_action( 'trash_comment', __NAMESPACE__ . '\on_comment_delete', 10, 2 );
+			add_action( 'trash_comment', __NAMESPACE__ . '\on_comment_trash', 10, 2 );
+			add_action( 'untrash_comment', __NAMESPACE__ . '\on_comment_untrash', 10, 2 );
+			add_action( 'delete_comment', __NAMESPACE__ . '\on_comment_delete', 10, 2 );
 		}
 	);
 }
@@ -113,13 +115,13 @@ function handle_initial_push( $post_id, $remote_post_id, $signature, $target_url
  * @param int  $comment_id Created / updated comment ID.
  * @param bool $approved Is comment approved?
  */
-function on_comment_insert( $comment_id, $approved, true ) {
+function on_comment_insert( $comment_id, $approved ) {
 	if ( ! $approved ) {
 		return;
 	}
 	$comment   = get_comment( $comment_id, 'ARRAY_A' );
 	$parent_id = $comment['comment_post_ID'];
-	handle_update( $parent_id, $comment_id );
+	handle_update( $parent_id, $comment_id, true );
 }
 
 /**
@@ -215,6 +217,127 @@ function handle_update( $post_id, $comment, $allow_termination = false ) {
 	return $result;
 }
 
+/**
+ * Hook on post trash
+ *
+ * @param int        $comment_id Comment ID.
+ * @param WP_Comment $comment    The comment to be trashed.
+ */
+function on_comment_trash( $comment_id, $comment ) {
+	handle_trash( $comment_id );
+}
+
+/**
+ * Trash comment in destinations
+ *
+ * @param int $comment_id Trashed comment ID.
+ *
+ * @return bool|void
+ */
+function handle_trash( $comment_id ) {
+	$comment       = get_comment( $comment_id );
+	$subscriptions = get_post_meta( $comment->comment_post_ID, 'dt_subscriptions', true );
+	if ( empty( $subscriptions ) ) {
+		return false;
+	}
+	$result = [];
+	foreach ( $subscriptions as $subscription_key => $subscription_id ) {
+		$signature      = get_post_meta( $subscription_id, 'dt_subscription_signature', true );
+		$remote_post_id = get_post_meta( $subscription_id, 'dt_subscription_remote_post_id', true );
+		$target_url     = get_post_meta( $subscription_id, 'dt_subscription_target_url', true );
+
+		if ( empty( $signature ) || empty( $target_url ) || empty( $remote_post_id ) ) {
+			continue;
+		}
+		$post_body = [
+			'post_id'      => $remote_post_id,
+			'signature'    => $signature,
+			'comment_data' => $comment_id,
+		];
+		$request   = wp_remote_post(
+			untrailingslashit( $target_url ) . '/wp/v2/distributor/comments/trash',
+			[
+				'timeout' => 60,
+				/**
+				 * Filter the arguments sent to the remote server during a comment delete.
+				 *
+				 * @param  array  $post_body The request body to send.
+				 * @param  int $post      Comment that is being deleted.
+				 */
+				'body'    => apply_filters( 'dt_comment_trash_post_args', $post_body, $comment->comment_post_ID ),
+			]
+		);
+		if ( ! is_wp_error( $request ) ) {
+			$response_code = wp_remote_retrieve_response_code( $request );
+			$headers       = wp_remote_retrieve_headers( $request );
+
+			$result[ $subscription_id ] = json_decode( wp_remote_retrieve_body( $request ) );
+		} else {
+			$result[ $subscription_id ] = $request;
+		}
+	}
+}
+
+/**
+ * Hook on post un-trash
+ *
+ * @param int        $comment_id Comment ID.
+ * @param WP_Comment $comment    The comment to be deleted.
+ */
+function on_comment_untrash( $comment_id, $comment ) {
+	handle_untrash( $comment_id );
+}
+
+/**
+ * Un-trash comment
+ *
+ * @param int $comment_id Un-trashed comment ID.
+ *
+ * @return bool|void
+ */
+function handle_untrash( $comment_id ) {
+	$comment       = get_comment( $comment_id );
+	$subscriptions = get_post_meta( $comment->comment_post_ID, 'dt_subscriptions', true );
+	if ( empty( $subscriptions ) ) {
+		return false;
+	}
+	$result = [];
+	foreach ( $subscriptions as $subscription_key => $subscription_id ) {
+		$signature      = get_post_meta( $subscription_id, 'dt_subscription_signature', true );
+		$remote_post_id = get_post_meta( $subscription_id, 'dt_subscription_remote_post_id', true );
+		$target_url     = get_post_meta( $subscription_id, 'dt_subscription_target_url', true );
+
+		if ( empty( $signature ) || empty( $target_url ) || empty( $remote_post_id ) ) {
+			continue;
+		}
+		$post_body = [
+			'post_id'      => $remote_post_id,
+			'signature'    => $signature,
+			'comment_data' => $comment_id,
+		];
+		$request   = wp_remote_post(
+			untrailingslashit( $target_url ) . '/wp/v2/distributor/comments/untrash',
+			[
+				'timeout' => 60,
+				/**
+				 * Filter the arguments sent to the remote server during a comment delete.
+				 *
+				 * @param  array  $post_body The request body to send.
+				 * @param  int $post      Comment that is being deleted.
+				 */
+				'body'    => apply_filters( 'dt_comment_untrash_post_args', $post_body, $comment->comment_post_ID ),
+			]
+		);
+		if ( ! is_wp_error( $request ) ) {
+			$response_code = wp_remote_retrieve_response_code( $request );
+			$headers       = wp_remote_retrieve_headers( $request );
+
+			$result[ $subscription_id ] = json_decode( wp_remote_retrieve_body( $request ) );
+		} else {
+			$result[ $subscription_id ] = $request;
+		}
+	}
+}
 
 /**
  * Hook on post delete
@@ -227,9 +350,11 @@ function on_comment_delete( $comment_id, $comment ) {
 }
 
 /**
- * Delete comments in destinations
+ * Delete comment in destinations
  *
  * @param int $comment_id Deleted comment ID.
+ *
+ * @return bool|void
  */
 function handle_delete( $comment_id ) {
 	$comment       = get_comment( $comment_id );

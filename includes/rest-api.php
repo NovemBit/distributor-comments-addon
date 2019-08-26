@@ -54,6 +54,7 @@ function register_rest_routes() {
 			},
 		]
 	);
+
 	// Endpoint will receive data on comment update
 	register_rest_route(
 		'wp/v2',
@@ -86,6 +87,7 @@ function register_rest_routes() {
 			},
 		]
 	);
+
 	// Endpoint will receive data on comment delete
 	register_rest_route(
 		'wp/v2',
@@ -119,6 +121,71 @@ function register_rest_routes() {
 		]
 	);
 
+	// Endpoint will receive data on trashing a comment
+	register_rest_route(
+		'wp/v2',
+		'/distributor/comments/trash',
+		[
+			'methods'             => 'POST',
+			'args'                => [
+				'post_id'      => [
+					'required'          => true,
+					'validate_callback' => function( $param, $request, $key ) {
+						return is_numeric( $param );
+					},
+				],
+				'signature'    => [
+					'required'          => true,
+					'validate_callback' => function( $param, $request, $key ) {
+						return is_string( $param );
+					},
+				],
+				'comment_data' => [
+					'required'          => true,
+					'validate_callback' => function( $param, $request, $key ) {
+						return is_numeric( $param );
+					},
+				],
+			],
+			'callback'            => __NAMESPACE__ . '\trash_comments',
+			'permission_callback' => function () {
+				return true;
+			},
+		]
+	);
+
+	// Endpoint will receive data on un-trashing a comment
+	register_rest_route(
+		'wp/v2',
+		'/distributor/comments/untrash',
+		[
+			'methods'             => 'POST',
+			'args'                => [
+				'post_id'      => [
+					'required'          => true,
+					'validate_callback' => function( $param, $request, $key ) {
+						return is_numeric( $param );
+					},
+				],
+				'signature'    => [
+					'required'          => true,
+					'validate_callback' => function( $param, $request, $key ) {
+						return is_string( $param );
+					},
+				],
+				'comment_data' => [
+					'required'          => true,
+					'validate_callback' => function( $param, $request, $key ) {
+						return is_numeric( $param );
+					},
+				],
+			],
+			'callback'            => __NAMESPACE__ . '\untrash_comments',
+			'permission_callback' => function () {
+				return true;
+			},
+		]
+	);
 }
 
 /**
@@ -199,6 +266,62 @@ function update_comments( \WP_REST_Request $request ) {
 	return $result;
 }
 
+/**
+ * Trash comments that trashed in source
+ *
+ * @param \WP_REST_Request $request WP_REST_Request instance.
+ *
+ * @return array
+ */
+function trash_comments( \WP_REST_Request $request ) {
+	$post_id          = $request->get_param( 'post_id' );
+	$signature        = $request->get_param( 'signature' );
+	$comment_data     = $request->get_param( 'comment_data' );
+	$is_valid_request = \DT\NbAddon\Comments\Utils\validate_request( $post_id, $signature );
+	if ( true !== $is_valid_request ) {
+		return $is_valid_request;
+	}
+	// Get current comment counting defer status.
+	$defer_status = wp_defer_comment_counting();
+	// Set counting defer to false.
+	wp_defer_comment_counting( true );
+	$result = \DT\NbAddon\Comments\Utils\trash_comments( $post_id, $comment_data );
+
+	// apply deferred counts.
+	wp_defer_comment_counting( false );
+
+	// Set initial defer status.
+	wp_defer_comment_counting( $defer_status );
+	return $result;
+}
+
+/**
+ * Un-trash comments that un-trashed in source
+ *
+ * @param \WP_REST_Request $request WP_REST_Request instance.
+ * @return array
+ */
+function untrash_comments( \WP_REST_Request $request ) {
+	$post_id          = $request->get_param( 'post_id' );
+	$signature        = $request->get_param( 'signature' );
+	$comment_data     = $request->get_param( 'comment_data' );
+	$is_valid_request = \DT\NbAddon\Comments\Utils\validate_request( $post_id, $signature );
+	if ( true !== $is_valid_request ) {
+		return $is_valid_request;
+	}
+	// Get current comment counting defer status.
+	$defer_status = wp_defer_comment_counting();
+	// Set counting defer to false.
+	wp_defer_comment_counting( true );
+	$result = \DT\NbAddon\Comments\Utils\untrash_comments( $post_id, $comment_data );
+
+	// apply deferred counts.
+	wp_defer_comment_counting( false );
+
+	// Set initial defer status.
+	wp_defer_comment_counting( $defer_status );
+	return $result;
+}
 
 /**
  * Delete comments that deleted in source

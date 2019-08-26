@@ -192,10 +192,63 @@ function is_assoc( array $arr ) {
 
 
 /**
+ * Trash comments
+ *
+ * @param int       $post_id Post ID.
+ * @param int|array $comments Array of comments ids.
+ *
+ * @return array
+ */
+function trash_comments( $post_id, $comments ) {
+	$res = [];
+	if ( ! is_array( $comments ) ) {
+		$comments = [ $comments ];
+	}
+	foreach ( $comments as $comment ) {
+		$id = get_comment_from_original_id( $comment, $post_id );
+		if ( ! empty( $id ) ) {
+			if ( wp_trash_comment( $id ) ) {
+				$res['success'][] = $comment;
+			} else {
+				$res['fail'][] = $comment;
+			}
+		}
+	}
+	return $res;
+}
+
+/**
  * Perform comments deleting
  *
- * @param int   $post_id Post ID.
- * @param array $comments Array of comments ids.
+ * @param int       $post_id Post ID.
+ * @param int|array $comments Array of comments ids.
+ *
+ * @return array
+ */
+function untrash_comments( $post_id, $comments ) {
+	$res = [];
+	if ( ! is_array( $comments ) ) {
+		$comments = [ $comments ];
+	}
+	foreach ( $comments as $comment ) {
+		$id = get_comment_from_original_id( $comment, $post_id );
+		if ( ! empty( $id ) ) {
+			if ( wp_untrash_comment( $id ) ) {
+				$res['success'][] = $comment;
+			} else {
+				$res['fail'][] = $comment;
+			}
+		}
+	}
+	return $res;
+}
+
+/**
+ * Perform comments deleting
+ *
+ * @param int       $post_id Post ID.
+ * @param int|array $comments Array of comments ids.
+ *
  * @return array
  */
 function delete_comments( $post_id, $comments ) {
