@@ -34,7 +34,7 @@ function initial_push( $post_id, $remote_post_id, $signature, $target_url ) {
 
 	$comments_count = get_comments_number( $post_id );
 	if ( $comments_count > 0 ) {
-		handle_push( $post_id, $remote_post_id, $signature, $target_url );
+		handle_initial_push( $post_id, $remote_post_id, $signature, $target_url, true );
 	}
 }
 
@@ -47,22 +47,23 @@ function initial_push( $post_id, $remote_post_id, $signature, $target_url ) {
  * @param string $signature Generated signature for subscription.
  * @param string $target_url Target url to push to.
  */
-function handle_push( $post_id, $remote_post_id, $signature, $target_url ) {
-	if ( ! wp_doing_cron() ) { //phpcs:ignore
-	/**
-	 * Add possibility to perform comments pushing in bg
-	 *
-	 * @param bool      true            Whether to oudh comment.
-	 * @param int    $post_id Pushed post ID.
-	 * @param int    $remote_post_id Remote post ID.
-	 * @param string $signature Generated signature for subscription.
-	 * @param string $target_url Target url to push to.
-	 */
-	$allow_comments_update = apply_filters( 'dt_allow_comments_update', true, $post_id, $remote_post_id, $signature, $target_url );
-	if ( false === $allow_comments_update ) {
-		return;
+function handle_initial_push( $post_id, $remote_post_id, $signature, $target_url, $allow_termination = false ) {
+	if( true === $allow_termination ) {
+		/**
+		 * Add possibility to perform comments pushing
+		 *
+		 * @param bool      true            Whether to oudh comment.
+		 * @param int    $post_id Pushed post ID.
+		 * @param int    $remote_post_id Remote post ID.
+		 * @param string $signature Generated signature for subscription.
+		 * @param string $target_url Target url to push to.
+		 */
+		$allow_comments_update = apply_filters( 'dt_allow_comments_initial_push', true, $post_id, $remote_post_id, $signature, $target_url );
+		if ( false === $allow_comments_update ) {
+			return;
+		}
 	}
-	}
+
 	$args         = array(
 		'post_id' => $post_id,
 	);
@@ -144,9 +145,8 @@ function handle_update( $post_id, $comment ) {
 	if ( empty( $subscriptions ) ) {
 		return;
 	}
-	if ( ! wp_doing_cron() ) { //phpcs:ignore
 	/**
-	 * Add possibility to perform comments update in bg
+	 * Add possibility to perform comments pushing
 	 *
 	 * @param bool      true            Whether to oudh comment.
 	 * @param int    $post_id Pushed post ID.
@@ -156,7 +156,6 @@ function handle_update( $post_id, $comment ) {
 	if ( ! $allow_comments_push ) {
 		return;
 	}
-}
 	$comments_data = [];
 	if ( is_array( $comment ) ) {
 		foreach ( $comment as $id ) {
@@ -165,7 +164,7 @@ function handle_update( $post_id, $comment ) {
 		}
 	} else {
 		$comment_data['comment_data']     = get_comment( $comment, 'ARRAY_A' );
-			$comment_data['comment_meta'] = get_comment_meta( $comment );
+		$comment_data['comment_meta'] = get_comment_meta( $comment );
 	}
 	$result = [];
 	foreach ( $subscriptions as $subscription_key => $subscription_id ) {
@@ -228,7 +227,7 @@ function handle_delete( $comment_id ) {
 	if ( empty( $subscriptions ) ) {
 		return false;
 	}
-		$result = [];
+	$result = [];
 	foreach ( $subscriptions as $subscription_key => $subscription_id ) {
 		$signature      = get_post_meta( $subscription_id, 'dt_subscription_signature', true );
 		$remote_post_id = get_post_meta( $subscription_id, 'dt_subscription_remote_post_id', true );
