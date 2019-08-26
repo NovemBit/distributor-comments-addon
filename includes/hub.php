@@ -46,6 +46,9 @@ function initial_push( $post_id, $remote_post_id, $signature, $target_url ) {
  * @param int    $remote_post_id Remote post ID.
  * @param string $signature Generated signature for subscription.
  * @param string $target_url Target url to push to.
+ * @param bool   $allow_termination Whether run "apply filters" to allow to terminate function execution or not
+ *
+ * @return void
  */
 function handle_initial_push( $post_id, $remote_post_id, $signature, $target_url, $allow_termination = false ) {
 	if( true === $allow_termination ) {
