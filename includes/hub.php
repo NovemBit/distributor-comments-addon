@@ -113,7 +113,7 @@ function handle_initial_push( $post_id, $remote_post_id, $signature, $target_url
  * @param int  $comment_id Created / updated comment ID.
  * @param bool $approved Is comment approved?
  */
-function on_comment_insert( $comment_id, $approved ) {
+function on_comment_insert( $comment_id, $approved, true ) {
 	if ( ! $approved ) {
 		return;
 	}
@@ -142,32 +142,39 @@ function on_comment_update( $comment_id, $data ) {
  *
  * @param int       $post_id Comment's parent post ID.
  * @param int|array $comment Array or single comment ID.
+ * @param bool      $allow_termination Whether run "apply filters" to allow to terminate function execution or not
+ *
+ * @return void
  */
-function handle_update( $post_id, $comment ) {
+function handle_update( $post_id, $comment, $allow_termination = false ) {
 	$subscriptions = get_post_meta( $post_id, 'dt_subscriptions', true );
 	if ( empty( $subscriptions ) ) {
 		return;
 	}
-	/**
-	 * Add possibility to perform comments pushing
-	 *
-	 * @param bool      true            Whether to oudh comment.
-	 * @param int    $post_id Pushed post ID.
-	 * @param WP_Post $comment Comment object.
-	 */
-	$allow_comments_push = apply_filters( 'dt_allow_comments_push', true, $post_id, $comment );
-	if ( ! $allow_comments_push ) {
-		return;
+
+	if ( true === $allow_termination ) { //phpcs:ignore
+		/**
+		 * Add possibility to perform comments update in bg
+		 *
+		 * @param bool      true            Whether to oudh comment.
+		 * @param int    $post_id Pushed post ID.
+		 * @param WP_Post $comment Comment object.
+		 */
+		$allow_comments_push = apply_filters( 'dt_allow_comments_update', true, $post_id, $comment );
+		if ( ! $allow_comments_push ) {
+			return;
+		}
 	}
+
 	$comments_data = [];
 	if ( is_array( $comment ) ) {
 		foreach ( $comment as $id ) {
-			$comment_data['comment_data'] = get_comment( $id, 'ARRAY_A' );
-			$comment_data['comment_meta'] = get_comment_meta( $id );
+			$comments_data['comment_data'] = get_comment( $id, 'ARRAY_A' );
+			$comments_data['comment_meta'] = get_comment_meta( $id );
 		}
 	} else {
-		$comment_data['comment_data']     = get_comment( $comment, 'ARRAY_A' );
-		$comment_data['comment_meta'] = get_comment_meta( $comment );
+		$comments_data['comment_data']     = get_comment( $comment, 'ARRAY_A' );
+		$comments_data['comment_meta'] = get_comment_meta( $comment );
 	}
 	$result = [];
 	foreach ( $subscriptions as $subscription_key => $subscription_id ) {
@@ -182,7 +189,7 @@ function handle_update( $post_id, $comment ) {
 		$post_body = [
 			'post_id'      => $remote_post_id,
 			'signature'    => $signature,
-			'comment_data' => $comment_data,
+			'comment_data' => $comments_data,
 		];
 		$request   = wp_remote_post(
 			untrailingslashit( $target_url ) . '/wp/v2/distributor/comments/update',
