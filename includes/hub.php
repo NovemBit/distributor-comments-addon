@@ -20,6 +20,9 @@ function setup() {
 			add_action( 'trash_comment', __NAMESPACE__ . '\on_comment_trash', 10, 2 );
 			add_action( 'untrashed_comment', __NAMESPACE__ . '\on_comment_untrash', 10, 2 );
 			add_action( 'delete_comment', __NAMESPACE__ . '\on_comment_delete', 10, 2 );
+			add_action( 'wp_set_comment_status', __NAMESPACE__ . '\on_comment_status_change', 10, 2 );
+			add_action( 'spam_comment', __NAMESPACE__ . '\on_comment_spam', 10, 2 );
+			add_action( 'unspammed_comment', __NAMESPACE__ . '\on_comment_unspam', 10, 2 );
 		}
 	);
 }
@@ -116,9 +119,6 @@ function handle_initial_push( $post_id, $remote_post_id, $signature, $target_url
  * @param bool $approved Is comment approved?
  */
 function on_comment_insert( $comment_id, $approved ) {
-	if ( ! $approved ) {
-		return;
-	}
 	$comment   = get_comment( $comment_id, 'ARRAY_A' );
 	$parent_id = $comment['comment_post_ID'];
 	handle_update( $parent_id, $comment_id, true );
@@ -160,7 +160,7 @@ function handle_update( $post_id, $comment, $allow_termination = false ) {
 		 *
 		 * @param bool      true            Whether to oudh comment.
 		 * @param int    $post_id Pushed post ID.
-		 * @param WP_Post $comment Comment object.
+		 * @param \WP_Post $comment Comment object.
 		 */
 		$allow_comments_push = apply_filters( 'dt_allow_comments_update', true, $post_id, $comment );
 		if ( ! $allow_comments_push ) {
@@ -221,7 +221,7 @@ function handle_update( $post_id, $comment, $allow_termination = false ) {
  * Hook on post trash
  *
  * @param int        $comment_id Comment ID.
- * @param WP_Comment $comment    The comment to be trashed.
+ * @param \WP_Comment $comment    The comment to be trashed.
  */
 function on_comment_trash( $comment_id, $comment ) {
 	handle_trash( $comment_id );
@@ -282,14 +282,14 @@ function handle_trash( $comment_id ) {
  * Hook on post un-trash
  *
  * @param int        $comment_id Comment ID.
- * @param WP_Comment $comment    The comment to be deleted.
+ * @param \WP_Comment $comment    The comment to be deleted.
  */
 function on_comment_untrash( $comment_id, $comment ) {
 	handle_untrash( $comment_id );
 }
 
 /**
- * Un-trash comment
+ * Un-trash comment in destinations
  *
  * @param int $comment_id Un-trashed comment ID.
  *
@@ -304,7 +304,6 @@ function handle_untrash( $comment_id ) {
 	$status = wp_get_comment_status( $comment_id );
 
 	// Since gotten statuses are different from ones the `wp_set_comment_status(..)` accepts as parameters
-	$adapted_status = '';
 	switch ( $status ) {
 		case 'approved':
 			$adapted_status = 'approve';
@@ -362,7 +361,7 @@ function handle_untrash( $comment_id ) {
  * Hook on post delete
  *
  * @param int        $comment_id Comment ID.
- * @param WP_Comment $comment    The comment to be deleted.
+ * @param \WP_Comment $comment    The comment to be deleted.
  */
 function on_comment_delete( $comment_id, $comment ) {
 	handle_delete( $comment_id );
@@ -406,6 +405,216 @@ function handle_delete( $comment_id ) {
 				 * @param  int $post      Comment that is being deleted.
 				 */
 				'body'    => apply_filters( 'dt_comment_delete_post_args', $post_body, $comment->comment_post_ID ),
+			]
+		);
+		if ( ! is_wp_error( $request ) ) {
+			$response_code = wp_remote_retrieve_response_code( $request );
+			$headers       = wp_remote_retrieve_headers( $request );
+
+			$result[ $subscription_id ] = json_decode( wp_remote_retrieve_body( $request ) );
+		} else {
+			$result[ $subscription_id ] = $request;
+		}
+	}
+}
+
+/**
+ * Hook on post delete
+ *
+ * @param int         $comment_id     Comment ID.
+ * @param string|bool $comment_status Current comment status. Possible values include
+ *                                      'hold', 'approve', 'spam', 'trash', or false.
+ */
+function on_comment_status_change( $comment_id, $comment_status ) {
+	handle_status_change( $comment_id, $comment_status );
+}
+
+/**
+ * Approve/Un-approve comment in destinations
+ *
+ * @param int         $comment_id     Comment ID.
+ * @param string|bool $comment_status Current comment status. Possible values include
+ *                                      'hold', 'approve', 'spam', 'trash', or false.
+ *
+ * @return bool|void
+ */
+function handle_status_change( $comment_id, $comment_status ) {
+	// Handling only 'approve', 'unapprove' actions, bail out in other cases
+	if( ! in_array( $comment_status, [ 'approve', 'hold' ] ) ) {
+		return;
+	}
+
+	$comment       = get_comment( $comment_id );
+	$subscriptions = get_post_meta( $comment->comment_post_ID, 'dt_subscriptions', true );
+	if ( empty( $subscriptions ) ) {
+		return false;
+	}
+	$result = [];
+	foreach ( $subscriptions as $subscription_key => $subscription_id ) {
+		$signature      = get_post_meta( $subscription_id, 'dt_subscription_signature', true );
+		$remote_post_id = get_post_meta( $subscription_id, 'dt_subscription_remote_post_id', true );
+		$target_url     = get_post_meta( $subscription_id, 'dt_subscription_target_url', true );
+
+		if ( empty( $signature ) || empty( $target_url ) || empty( $remote_post_id ) ) {
+			continue;
+		}
+		$post_body = [
+			'post_id'        => $remote_post_id,
+			'signature'      => $signature,
+			'comment_data'   => $comment_id,
+			'comment_status' => $comment_status,
+		];
+		$request   = wp_remote_post(
+			untrailingslashit( $target_url ) . '/wp/v2/distributor/comments/status_change',
+			[
+				'timeout' => 60,
+				/**
+				 * Filter the arguments sent to the remote server during a comment delete.
+				 *
+				 * @param  array  $post_body The request body to send.
+				 * @param  int $post      Comment that is being deleted.
+				 */
+				'body'    => apply_filters( 'dt_comment_status_change_post_args', $post_body, $comment->comment_post_ID ),
+			]
+		);
+		if ( ! is_wp_error( $request ) ) {
+			$response_code = wp_remote_retrieve_response_code( $request );
+			$headers       = wp_remote_retrieve_headers( $request );
+
+			$result[ $subscription_id ] = json_decode( wp_remote_retrieve_body( $request ) );
+		} else {
+			$result[ $subscription_id ] = $request;
+		}
+	}
+}
+
+/**
+ * Hook on post spam
+ *
+ * @param int        $comment_id Comment ID.
+ * @param \WP_Comment $comment    The comment to be trashed.
+ */
+function on_comment_spam( $comment_id, $comment ) {
+	handle_spam( $comment_id );
+}
+
+/**
+ * Spam comment in destinations
+ *
+ * @param int $comment_id Trashed comment ID.
+ *
+ * @return bool|void
+ */
+function handle_spam( $comment_id ) {
+	$comment       = get_comment( $comment_id );
+	$subscriptions = get_post_meta( $comment->comment_post_ID, 'dt_subscriptions', true );
+	if ( empty( $subscriptions ) ) {
+		return false;
+	}
+	$result = [];
+	foreach ( $subscriptions as $subscription_key => $subscription_id ) {
+		$signature      = get_post_meta( $subscription_id, 'dt_subscription_signature', true );
+		$remote_post_id = get_post_meta( $subscription_id, 'dt_subscription_remote_post_id', true );
+		$target_url     = get_post_meta( $subscription_id, 'dt_subscription_target_url', true );
+
+		if ( empty( $signature ) || empty( $target_url ) || empty( $remote_post_id ) ) {
+			continue;
+		}
+		$post_body = [
+			'post_id'      => $remote_post_id,
+			'signature'    => $signature,
+			'comment_data' => $comment_id,
+		];
+		$request   = wp_remote_post(
+			untrailingslashit( $target_url ) . '/wp/v2/distributor/comments/spam',
+			[
+				'timeout' => 60,
+				/**
+				 * Filter the arguments sent to the remote server during a comment delete.
+				 *
+				 * @param  array  $post_body The request body to send.
+				 * @param  int $post      Comment that is being deleted.
+				 */
+				'body'    => apply_filters( 'dt_comment_spam_post_args', $post_body, $comment->comment_post_ID ),
+			]
+		);
+		if ( ! is_wp_error( $request ) ) {
+			$response_code = wp_remote_retrieve_response_code( $request );
+			$headers       = wp_remote_retrieve_headers( $request );
+
+			$result[ $subscription_id ] = json_decode( wp_remote_retrieve_body( $request ) );
+		} else {
+			$result[ $subscription_id ] = $request;
+		}
+	}
+}
+
+/**
+ * Hook on post un-spam
+ *
+ * @param int        $comment_id Comment ID.
+ * @param \WP_Comment $comment    The comment to be deleted.
+ */
+function on_comment_unspam( $comment_id, $comment ) {
+	handle_unspam( $comment_id );
+}
+
+/**
+ * Un-spam comment in destinations
+ *
+ * @param int $comment_id Un-trashed comment ID.
+ *
+ * @return bool|void
+ */
+function handle_unspam( $comment_id ) {
+	$comment       = get_comment( $comment_id );
+	$subscriptions = get_post_meta( $comment->comment_post_ID, 'dt_subscriptions', true );
+	if ( empty( $subscriptions ) ) {
+		return false;
+	}
+	$status = wp_get_comment_status( $comment_id );
+
+	// Since gotten statuses are different from ones the `wp_set_comment_status(..)` accepts as parameters
+	switch ( $status ) {
+		case 'approved':
+			$adapted_status = 'approve';
+			break;
+		case 'unapproved':
+			$adapted_status = 'hold';
+			break;
+		case 'trash':
+			$adapted_status = 'trash';
+			break;
+		default:
+			$adapted_status = 'hold';
+	}
+
+	$result = [];
+	foreach ( $subscriptions as $subscription_key => $subscription_id ) {
+		$signature      = get_post_meta( $subscription_id, 'dt_subscription_signature', true );
+		$remote_post_id = get_post_meta( $subscription_id, 'dt_subscription_remote_post_id', true );
+		$target_url     = get_post_meta( $subscription_id, 'dt_subscription_target_url', true );
+
+		if ( empty( $signature ) || empty( $target_url ) || empty( $remote_post_id ) ) {
+			continue;
+		}
+		$post_body = [
+			'post_id'        => $remote_post_id,
+			'signature'      => $signature,
+			'comment_data'   => $comment_id,
+			'comment_status' => $adapted_status
+		];
+		$request   = wp_remote_post(
+			untrailingslashit( $target_url ) . '/wp/v2/distributor/comments/unspam',
+			[
+				'timeout' => 60,
+				/**
+				 * Filter the arguments sent to the remote server during a comment delete.
+				 *
+				 * @param  array  $post_body The request body to send.
+				 * @param  int $post      Comment that is being deleted.
+				 */
+				'body'    => apply_filters( 'dt_comment_unspam_post_args', $post_body, $comment->comment_post_ID ),
 			]
 		);
 		if ( ! is_wp_error( $request ) ) {

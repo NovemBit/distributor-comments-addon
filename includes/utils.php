@@ -190,7 +190,6 @@ function is_assoc( array $arr ) {
 	return array_keys( $arr ) !== range( 0, count( $arr ) - 1 );
 }
 
-
 /**
  * Trash comments
  *
@@ -205,7 +204,7 @@ function trash_comments( $post_id, $comments ) {
 		$comments = [ $comments ];
 	}
 	foreach ( $comments as $comment ) {
-		$id = get_comment_from_original_id( $comment, $post_id );
+		$id = get_comment_from_original_id( $comment );
 		if ( ! empty( $id ) ) {
 			if ( wp_trash_comment( $id ) ) {
 				$res['success'][] = $comment;
@@ -232,7 +231,7 @@ function untrash_comments( $post_id, $comments, $comment_status ) {
 		$comments = [ $comments ];
 	}
 	foreach ( $comments as $comment ) {
-		$id = get_comment_from_original_id( $comment, $post_id );
+		$id = get_comment_from_original_id( $comment );
 		if ( ! empty( $id ) ) {
 			if ( wp_untrash_comment( $id ) ) {
 				wp_set_comment_status( $id, $comment_status );
@@ -259,9 +258,90 @@ function delete_comments( $post_id, $comments ) {
 		$comments = [ $comments ];
 	}
 	foreach ( $comments as $comment ) {
-		$id = get_comment_from_original_id( $comment, $post_id );
+		$id = get_comment_from_original_id( $comment );
 		if ( ! empty( $id ) ) {
 			if ( wp_delete_comment( $id, true ) ) {
+				$res['success'][] = $comment;
+			} else {
+				$res['fail'][] = $comment;
+			}
+		}
+	}
+	return $res;
+}
+
+/**
+ * Approve/Un-approve comments
+ *
+ * @param int       $post_id Post ID.
+ * @param int|array $comments Array of comments ids.
+ * @param string    comment_status Comment status to set it explicitly
+ *
+ * @return array
+ */
+function change_comments_status( $post_id, $comments, $comment_status ) {
+	$res = [];
+	if ( ! is_array( $comments ) ) {
+		$comments = [ $comments ];
+	}
+	foreach ( $comments as $comment ) {
+		$id = get_comment_from_original_id( $comment );
+		if ( ! empty( $id ) ) {
+			if ( wp_set_comment_status( $id, $comment_status ) ) {
+				$res['success'][] = $comment;
+			} else {
+				$res['fail'][] = $comment;
+			}
+		}
+	}
+	return $res;
+}
+
+/**
+ * Spam comments
+ *
+ * @param int       $post_id Post ID.
+ * @param int|array $comments Array of comments ids.
+ *
+ * @return array
+ */
+function spam_comments( $post_id, $comments ) {
+	$res = [];
+	if ( ! is_array( $comments ) ) {
+		$comments = [ $comments ];
+	}
+	foreach ( $comments as $comment ) {
+		$id = get_comment_from_original_id( $comment );
+		if ( ! empty( $id ) ) {
+			if ( wp_spam_comment( $id ) ) {
+				$res['success'][] = $comment;
+			} else {
+				$res['fail'][] = $comment;
+			}
+		}
+	}
+	return $res;
+}
+
+/**
+ * Un-spam comments
+ *
+ * @param int       $post_id Post ID.
+ * @param int|array $comments Array of comments ids.
+ * @param string    comment_status Comment status to set it explicitly
+ *
+ * @return array
+ */
+function unspam_comments( $post_id, $comments, $comment_status ) {
+	$res = [];
+	if ( ! is_array( $comments ) ) {
+		$comments = [ $comments ];
+	}
+	foreach ( $comments as $comment ) {
+		$id = get_comment_from_original_id( $comment );
+		if ( ! empty( $id ) ) {
+			if ( wp_unspam_comment( $id ) ) {
+				wp_set_comment_status( $id, $comment_status );
 				$res['success'][] = $comment;
 			} else {
 				$res['fail'][] = $comment;
