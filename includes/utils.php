@@ -222,10 +222,11 @@ function trash_comments( $post_id, $comments ) {
  *
  * @param int       $post_id Post ID.
  * @param int|array $comments Array of comments ids.
+ * @param string    comment_status Comment status to set it explicitly
  *
  * @return array
  */
-function untrash_comments( $post_id, $comments ) {
+function untrash_comments( $post_id, $comments, $comment_status ) {
 	$res = [];
 	if ( ! is_array( $comments ) ) {
 		$comments = [ $comments ];
@@ -234,6 +235,7 @@ function untrash_comments( $post_id, $comments ) {
 		$id = get_comment_from_original_id( $comment, $post_id );
 		if ( ! empty( $id ) ) {
 			if ( wp_untrash_comment( $id ) ) {
+				wp_set_comment_status( $id, $comment_status );
 				$res['success'][] = $comment;
 			} else {
 				$res['fail'][] = $comment;

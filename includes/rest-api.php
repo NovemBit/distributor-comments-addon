@@ -179,6 +179,12 @@ function register_rest_routes() {
 						return is_numeric( $param );
 					},
 				],
+				'comment_status' => [
+					'required'          => true,
+					'validate_callback' => function( $param, $request, $key ) {
+						return is_string( $param );
+					},
+				],
 			],
 			'callback'            => __NAMESPACE__ . '\untrash_comments',
 			'permission_callback' => function () {
@@ -305,6 +311,7 @@ function untrash_comments( \WP_REST_Request $request ) {
 	$post_id          = $request->get_param( 'post_id' );
 	$signature        = $request->get_param( 'signature' );
 	$comment_data     = $request->get_param( 'comment_data' );
+	$comment_status   = $request->get_param( 'comment_status' );
 	$is_valid_request = \DT\NbAddon\Comments\Utils\validate_request( $post_id, $signature );
 	if ( true !== $is_valid_request ) {
 		return $is_valid_request;
@@ -313,7 +320,7 @@ function untrash_comments( \WP_REST_Request $request ) {
 	$defer_status = wp_defer_comment_counting();
 	// Set counting defer to false.
 	wp_defer_comment_counting( true );
-	$result = \DT\NbAddon\Comments\Utils\untrash_comments( $post_id, $comment_data );
+	$result = \DT\NbAddon\Comments\Utils\untrash_comments( $post_id, $comment_data, $comment_status );
 
 	// apply deferred counts.
 	wp_defer_comment_counting( false );

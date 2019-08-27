@@ -18,7 +18,7 @@ function setup() {
 			add_action( 'comment_post', __NAMESPACE__ . '\on_comment_insert', 10, 2 );
 			add_action( 'edit_comment', __NAMESPACE__ . '\on_comment_update', 10, 2 );
 			add_action( 'trash_comment', __NAMESPACE__ . '\on_comment_trash', 10, 2 );
-			add_action( 'untrash_comment', __NAMESPACE__ . '\on_comment_untrash', 10, 2 );
+			add_action( 'untrashed_comment', __NAMESPACE__ . '\on_comment_untrash', 10, 2 );
 			add_action( 'delete_comment', __NAMESPACE__ . '\on_comment_delete', 10, 2 );
 		}
 	);
@@ -301,6 +301,24 @@ function handle_untrash( $comment_id ) {
 	if ( empty( $subscriptions ) ) {
 		return false;
 	}
+	$status = wp_get_comment_status( $comment_id );
+
+	// Since gotten statuses are different from ones the `wp_set_comment_status(..)` accepts as parameters
+	$adapted_status = '';
+	switch ( $status ) {
+		case 'approved':
+			$adapted_status = 'approve';
+			break;
+		case 'unapproved':
+			$adapted_status = 'hold';
+			break;
+		case 'spam':
+			$adapted_status = 'spam';
+			break;
+		default:
+			$adapted_status = 'hold';
+	}
+
 	$result = [];
 	foreach ( $subscriptions as $subscription_key => $subscription_id ) {
 		$signature      = get_post_meta( $subscription_id, 'dt_subscription_signature', true );
@@ -311,9 +329,10 @@ function handle_untrash( $comment_id ) {
 			continue;
 		}
 		$post_body = [
-			'post_id'      => $remote_post_id,
-			'signature'    => $signature,
-			'comment_data' => $comment_id,
+			'post_id'        => $remote_post_id,
+			'signature'      => $signature,
+			'comment_data'   => $comment_id,
+			'comment_status' => $adapted_status
 		];
 		$request   = wp_remote_post(
 			untrailingslashit( $target_url ) . '/wp/v2/distributor/comments/untrash',
