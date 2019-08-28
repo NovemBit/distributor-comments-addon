@@ -22,7 +22,7 @@ function dt_comments_add_on_bootstrap() {
 			add_action(
 				'admin_notices',
 				function() {
-					printf( '<div class="%1$s"><p>%2$s</p></div>', esc_attr( 'notice notice-error' ), esc_html( 'You need to have Distributor plug-in activated to run the {Add-on name}.', 'distributor-acf' ) );
+					printf( '<div class="%1$s"><p>%2$s</p></div>', esc_attr( 'notice notice-error' ), esc_html( 'You need to have Distributor plug-in activated to run the {Add-on name}.', 'distributor-comments' ) );
 				}
 			);
 		}
