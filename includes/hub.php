@@ -15,7 +15,7 @@ function setup() {
 		'init',
 		function () {
 			add_action( 'dt_post_subscription_created', __NAMESPACE__ . '\initial_push', 10, 4 );
-			add_action( 'comment_post', __NAMESPACE__ . '\on_comment_insert', 10, 2 );
+			add_action( 'wp_insert_comment', __NAMESPACE__ . '\on_comment_insert', 10, 2 );
 			add_action( 'edit_comment', __NAMESPACE__ . '\on_comment_update', 10, 2 );
 			add_action( 'trash_comment', __NAMESPACE__ . '\on_comment_trash', 10, 2 );
 			add_action( 'untrashed_comment', __NAMESPACE__ . '\on_comment_untrash', 10, 2 );
