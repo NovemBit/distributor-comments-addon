@@ -53,7 +53,7 @@ function initial_push( $post_id, $remote_post_id, $signature, $target_url ) {
  * @param string $target_url Target url to push to.
  * @param bool   $allow_termination Whether run "apply filters" to allow to terminate function execution or not
  *
- * @return void
+ * @return array|void
  */
 function handle_initial_push( $post_id, $remote_post_id, $signature, $target_url, $allow_termination = false ) {
 	if( true === $allow_termination ) {
@@ -75,8 +75,10 @@ function handle_initial_push( $post_id, $remote_post_id, $signature, $target_url
 	$args         = array(
 		'post_id' => $post_id,
 	);
-	$all_comments = get_comments( $args );
-	$comments     = [];
+	$all_comments                   = get_comments( $args );
+	$comments                       = [];
+	$result[$post_id]['target_url'] = $target_url;
+
 	foreach ( $all_comments as $comment ) {
 		$comments[] = array(
 			'comment_data' => $comment,
@@ -101,12 +103,15 @@ function handle_initial_push( $post_id, $remote_post_id, $signature, $target_url
 			'body'    => apply_filters( 'dt_comments_push_args', $post_body, $post_id ),
 		]
 	);
+
 	if ( ! is_wp_error( $request ) ) {
 		$response_code = wp_remote_retrieve_response_code( $request );
+		$body          = wp_remote_retrieve_body( $request );
 
-		$result = json_decode( wp_remote_retrieve_body( $request ) );
+		$result[$post_id]['response']['code'] = $response_code;
+		$result[$post_id]['response']['body'] = $body;
 	} else {
-		$result = $request;
+		$result[$post_id]['response'] = $request;
 	}
 
 	return $result;
