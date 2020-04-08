@@ -308,36 +308,38 @@ function register_rest_routes() {
  * Handle initial comments insert
  *
  * @param \WP_REST_Request $request WP_REST_Request instance.
- * @return array
+ * @return array|bool
  */
 function insert_comments( \WP_REST_Request $request ) {
 	$post_id          = $request->get_param( 'post_id' );
 	$signature        = $request->get_param( 'signature' );
 	$comment_data     = $request->get_param( 'comment_data' );
 	$is_valid_request = \DT\NbAddon\Comments\Utils\validate_request( $post_id, $signature );
+
 	if ( true !== $is_valid_request ) {
 		return $is_valid_request;
 	}
-		// Get current comment counting defer status.
-		$defer_status = wp_defer_comment_counting();
-		// Set counting defer to false.
-		wp_defer_comment_counting( true );
-		// Process comments.
+
+	// Get current comment counting defer status.
+	$defer_status = wp_defer_comment_counting();
+	// Set counting defer to false.
+	wp_defer_comment_counting( true );
+	// Process comments.
 	$result = \DT\NbAddon\Comments\Utils\process_comments( $comment_data, $post_id, true );
+	// apply deferred counts.
+	wp_defer_comment_counting( false );
 
-		// apply deferred counts.
-		wp_defer_comment_counting( false );
+	/**
+	 * Action fired after comments processed in destination
+	 *
+	 * @since 1.4.2
+	 * @param int $post_id Updated post id.
+	 */
+	do_action( 'dt_after_comments_processed', $post_id );
 
-		/**
-			 * Action fired after comments processed in destination
-			 *
-			 * @since 1.4.2
-			 * @param WP_Post         $post    Updated post object.
-			 */
-			do_action( 'dt_after_comments_processed', $post_id );
+	// Set initial defer status.
+	wp_defer_comment_counting( $defer_status );
 
-		// Set initial defer status.
-		wp_defer_comment_counting( $defer_status );
 	return $result;
 }
 
@@ -345,7 +347,7 @@ function insert_comments( \WP_REST_Request $request ) {
  * Handle comments update
  *
  * @param \WP_REST_Request $request WP_REST_Request instance.
- * @return array
+ * @return array|bool
  */
 function update_comments( \WP_REST_Request $request ) {
 	$post_id          = $request->get_param( 'post_id' );
@@ -370,12 +372,12 @@ function update_comments( \WP_REST_Request $request ) {
 	wp_defer_comment_counting( false );
 
 	/**
-		 * Action fired after comments processed in destination
-		 *
-		 * @since 1.4.2
-		 * @param WP_Post         $post    Updated post object.
-		 */
-		do_action( 'dt_after_comments_processed', $post_id );
+	 * Action fired after comments processed in destination
+	 *
+	 * @since 1.4.2
+	 * @param int $post_id Updated post id.
+	 */
+	do_action( 'dt_after_comments_processed', $post_id );
 
 	// Set initial defer status.
 	wp_defer_comment_counting( $defer_status );
