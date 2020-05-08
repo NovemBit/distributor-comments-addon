@@ -151,7 +151,7 @@ function on_comment_update( $comment_id, $data ) {
  * @param int|array $comment Array or single comment ID.
  * @param bool      $allow_termination Whether run "apply filters" to allow to terminate function execution or not
  *
- * @return void
+ * @return array|void
  */
 function handle_update( $post_id, $comment, $allow_termination = false ) {
 	$subscriptions = get_post_meta( $post_id, 'dt_subscriptions', true );
