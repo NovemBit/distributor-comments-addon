@@ -151,7 +151,7 @@ function on_comment_update( $comment_id, $data ) {
  * @param int|array $comment Array or single comment ID.
  * @param bool      $allow_termination Whether run "apply filters" to allow to terminate function execution or not
  *
- * @return void
+ * @return array|void
  */
 function handle_update( $post_id, $comment, $allow_termination = false ) {
 	$subscriptions = get_post_meta( $post_id, 'dt_subscriptions', true );
@@ -183,11 +183,15 @@ function handle_update( $post_id, $comment, $allow_termination = false ) {
 		$comments_data['comment_data']     = get_comment( $comment, 'ARRAY_A' );
 		$comments_data['comment_meta'] = get_comment_meta( $comment );
 	}
+
 	$result = [];
+
 	foreach ( $subscriptions as $subscription_key => $subscription_id ) {
 		$signature      = get_post_meta( $subscription_id, 'dt_subscription_signature', true );
 		$remote_post_id = get_post_meta( $subscription_id, 'dt_subscription_remote_post_id', true );
 		$target_url     = get_post_meta( $subscription_id, 'dt_subscription_target_url', true );
+
+		$result[$subscription_key]['target_url'] = $target_url;
 
 		if ( empty( $signature ) || empty( $remote_post_id ) || empty( $target_url ) ) {
 			continue;
@@ -211,12 +215,15 @@ function handle_update( $post_id, $comment, $allow_termination = false ) {
 				'body'    => apply_filters( 'dt_comments_subscription_args', $post_body, $post_id ),
 			]
 		);
+
 		if ( ! is_wp_error( $request ) ) {
 			$response_code = wp_remote_retrieve_response_code( $request );
+			$body          = wp_remote_retrieve_body( $request );
 
-			$result[ $post_id ][ $subscription_id ] = json_decode( wp_remote_retrieve_body( $request ) );
+			$result[$subscription_key]['response']['code'] = $response_code;
+			$result[$subscription_key]['response']['body'] = $body;
 		} else {
-			$result[ $post_id ][ $subscription_id ] = $request;
+			$result[$subscription_key]['response'] = $request;
 		}
 	}
 	return $result;
