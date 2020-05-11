@@ -176,8 +176,10 @@ function handle_update( $post_id, $comment, $allow_termination = false ) {
 	$comments_data = [];
 	if ( is_array( $comment ) ) {
 		foreach ( $comment as $id ) {
-			$comments_data['comment_data'] = get_comment( $id, 'ARRAY_A' );
-			$comments_data['comment_meta'] = get_comment_meta( $id );
+			$comments_data[] = [
+				'comment_data' => get_comment( $id, 'ARRAY_A' ),
+				'comment_meta' => get_comment_meta( $id )
+			];
 		}
 	} else {
 		$comments_data['comment_data']     = get_comment( $comment, 'ARRAY_A' );
