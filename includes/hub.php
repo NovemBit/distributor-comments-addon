@@ -374,39 +374,52 @@ function handle_untrash( $comment_id ) {
 /**
  * Hook on post delete
  *
- * @param int        $comment_id Comment ID.
+ * @param int         $comment_id Comment ID.
  * @param \WP_Comment $comment    The comment to be deleted.
  */
 function on_comment_delete( $comment_id, $comment ) {
-	handle_delete( $comment_id );
+	/**
+	 * Add possibility to perform comments delete in background
+	 *
+	 * @param bool true Whether to allow comment delete process not in background
+	 * @param \WP_Comment $comment The comment to be deleted
+	 */
+	$allow_comments_delete = apply_filters( 'dt_allow_comments_delete', true, $comment );
+
+	if ( ! $allow_comments_delete ) {
+		return;
+	}
+
+	handle_delete( $comment->comment_post_ID, [ $comment_id ] );
 }
 
 /**
- * Delete comment in destinations
+ * Delete comments in destinations
  *
- * @param int $comment_id Deleted comment ID.
+ * @param int $post_id
+ * @param int[] $comment_ids
  *
- * @return bool|void
+ * @return array
  */
-function handle_delete( $comment_id ) {
-	$comment       = get_comment( $comment_id );
-	$subscriptions = get_post_meta( $comment->comment_post_ID, 'dt_subscriptions', true );
-	if ( empty( $subscriptions ) ) {
-		return false;
-	}
-	$result = [];
+function handle_delete( $post_id, $comment_ids ) {
+	$subscriptions = get_post_meta( $post_id, 'dt_subscriptions', true );
+	$result        = [];
+
 	foreach ( $subscriptions as $subscription_key => $subscription_id ) {
 		$signature      = get_post_meta( $subscription_id, 'dt_subscription_signature', true );
 		$remote_post_id = get_post_meta( $subscription_id, 'dt_subscription_remote_post_id', true );
 		$target_url     = get_post_meta( $subscription_id, 'dt_subscription_target_url', true );
 
+		$result[$subscription_key]['target_url'] = $target_url;
+
 		if ( empty( $signature ) || empty( $target_url ) || empty( $remote_post_id ) ) {
 			continue;
 		}
+
 		$post_body = [
 			'post_id'      => $remote_post_id,
 			'signature'    => $signature,
-			'comment_data' => $comment_id,
+			'comment_data' => $comment_ids,
 		];
 		$request   = wp_remote_post(
 			untrailingslashit( $target_url ) . '/wp/v2/distributor/comments/delete',
@@ -418,18 +431,22 @@ function handle_delete( $comment_id ) {
 				 * @param  array  $post_body The request body to send.
 				 * @param  int $post      Comment that is being deleted.
 				 */
-				'body'    => apply_filters( 'dt_comment_delete_post_args', $post_body, $comment->comment_post_ID ),
+				'body'    => apply_filters( 'dt_comment_delete_post_args', $post_body, $post_id ),
 			]
 		);
+
 		if ( ! is_wp_error( $request ) ) {
 			$response_code = wp_remote_retrieve_response_code( $request );
-			$headers       = wp_remote_retrieve_headers( $request );
+			$body          = wp_remote_retrieve_body( $request );
 
-			$result[ $subscription_id ] = json_decode( wp_remote_retrieve_body( $request ) );
+			$result[$subscription_key]['response']['code'] = $response_code;
+			$result[$subscription_key]['response']['body'] = $body;
 		} else {
-			$result[ $subscription_id ] = $request;
+			$result[$subscription_key]['response'] = $request;
 		}
 	}
+
+	return $result;
 }
 
 /**
