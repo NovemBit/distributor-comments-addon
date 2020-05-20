@@ -110,7 +110,7 @@ function register_rest_routes() {
 				'comment_data' => [
 					'required'          => true,
 					'validate_callback' => function( $param, $request, $key ) {
-						return is_numeric( $param );
+						return is_array( $param );
 					},
 				],
 			],
