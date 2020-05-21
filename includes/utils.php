@@ -350,3 +350,51 @@ function unspam_comments( $post_id, $comments, $comment_status ) {
 	}
 	return $res;
 }
+
+/**
+ * Delete comments deleted from hub
+ *
+ * @param int $post_id
+ * @param int[] $comment_ids
+ */
+function sync_comments( int $post_id, array $comment_ids ) {
+	if ( empty( $comment_ids ) ) {
+		return;
+	}
+
+	global $wpdb;
+	$comment_ids = escape_array( $comment_ids );
+	$comment_ids = empty( $comment_ids ) ? '' : implode( ', ', $comment_ids );
+
+	$query = "
+		SELECT * FROM {$wpdb->comments} c
+		JOIN {$wpdb->commentmeta} cm ON cm.comment_id = c.comment_ID AND meta_key = 'dt_original_comment_id'
+		WHERE c.comment_post_ID = %d
+		AND cm.meta_value NOT IN ({$comment_ids})
+	";
+	$query  = $wpdb->prepare( $query, $post_id );
+	$result = $wpdb->get_results( $query );
+	$comments_to_delete = array_column( $result, 'comment_ID' );
+
+	foreach ( $comments_to_delete as $comment_id ) {
+		wp_delete_comment( $comment_id );
+	}
+}
+
+/**
+ * Escape array of ids
+ *
+ * @param int[] $ids
+ *
+ * @return int[]
+ */
+function escape_array( array $ids ) {
+	global $wpdb;
+	$result = [];
+
+	foreach ( $ids as $id ) {
+		$result[] = $wpdb->prepare( '%d', $id );
+	}
+
+	return $result;
+}

@@ -182,9 +182,13 @@ function handle_update( $post_id, $comment, $allow_termination = false ) {
 			];
 		}
 	} else {
-		$comments_data['comment_data']     = get_comment( $comment, 'ARRAY_A' );
+		$comments_data['comment_data'] = get_comment( $comment, 'ARRAY_A' );
 		$comments_data['comment_meta'] = get_comment_meta( $comment );
 	}
+
+	$comments = get_comments([
+		'post_id' => $post_id
+	]);
 
 	$result = [];
 
@@ -203,6 +207,7 @@ function handle_update( $post_id, $comment, $allow_termination = false ) {
 			'post_id'      => $remote_post_id,
 			'signature'    => $signature,
 			'comment_data' => $comments_data,
+			'comments'     => $comments
 		];
 		$request   = wp_remote_post(
 			untrailingslashit( $target_url ) . '/wp/v2/distributor/comments/update',
