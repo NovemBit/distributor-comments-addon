@@ -353,6 +353,7 @@ function update_comments( \WP_REST_Request $request ) {
 	$post_id          = $request->get_param( 'post_id' );
 	$signature        = $request->get_param( 'signature' );
 	$comment_data     = $request->get_param( 'comment_data' );
+	$comments         = $request->get_param( 'comments' );
 	$is_valid_request = \DT\NbAddon\Comments\Utils\validate_request( $post_id, $signature );
 	if ( true !== $is_valid_request ) {
 		return $is_valid_request;
@@ -362,6 +363,9 @@ function update_comments( \WP_REST_Request $request ) {
 	$defer_status = wp_defer_comment_counting();
 	// Set counting defer to false.
 	wp_defer_comment_counting( true );
+	$comment_ids = array_column( $comments, 'comment_ID' );
+	\DT\NbAddon\Comments\Utils\sync_comments( $post_id, $comment_ids );
+
 	// Process comments.
 	$result = \DT\NbAddon\Comments\Utils\is_assoc( $comment_data ) ?
 					\DT\NbAddon\Comments\Utils\process_comments( [ $comment_data ], $post_id )
